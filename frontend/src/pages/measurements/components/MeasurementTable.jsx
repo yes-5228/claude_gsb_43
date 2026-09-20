@@ -1,6 +1,6 @@
 import DataTable from '../../../components/common/DataTable.jsx'
 import Tag from '../../../components/common/Tag.jsx'
-import { DATA_SOURCE_TONE } from '../../../constants/index.js'
+import { DATA_SOURCE_TONE, REVIEW_STATUS_TONE } from '../../../constants/index.js'
 import { formatDateTime, formatNumber, formatRatio } from '../../../utils/format.js'
 
 export default function MeasurementTable({ rows, loading, onDelete }) {
@@ -45,6 +45,18 @@ export default function MeasurementTable({ rows, loading, onDelete }) {
       key: 'data_source_label',
       title: '来源',
       render: (row) => <Tag tone={DATA_SOURCE_TONE[row.data_source]}>{row.data_source_label}</Tag>
+    },
+    {
+      key: 'review_status',
+      title: '审核状态',
+      render: (row) => (
+        <Tag
+          tone={REVIEW_STATUS_TONE[row.review_status]}
+          title={row.review_status === 'rejected' ? `驳回原因: ${row.review_reason || '-'}` : undefined}
+        >
+          {row.review_status_label}
+        </Tag>
+      )
     },
     { key: 'recorder', title: '录入人', render: (row) => row.recorder || '-' },
     {

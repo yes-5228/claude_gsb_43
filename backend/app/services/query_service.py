@@ -7,6 +7,7 @@ from ..domain.constants import (
     DATA_SOURCE_LABELS,
     EXCEEDANCE_STATUS_LABELS,
     PERIOD_LABELS,
+    REVIEW_STATUS_LABELS,
     STATION_TYPE_LABELS,
 )
 from ..domain.standards import POLLUTANT_CODES, get_pollutant
@@ -62,8 +63,13 @@ def _date_arg(args, name, end_of_day=False):
     return datetime.combine(parsed, time.max if end_of_day else time.min)
 
 
-def parse_filters(args):
-    """Translate request args into a normalised filter dictionary."""
+def parse_filters(args, default_review_statuses=None):
+    """Translate request args into a normalised filter dictionary.
+
+    ``default_review_statuses`` scopes the query to the approved-data
+    perimeter (统计与超标判定口径) when the caller does not pass an
+    explicit ``review_status`` parameter.
+    """
     pollutants = [item.upper() for item in _split(args.get("pollutant"))]
     unknown = [item for item in pollutants if item not in POLLUTANT_CODES]
     if unknown:
@@ -76,6 +82,15 @@ def parse_filters(args):
         if period not in PERIOD_LABELS:
             raise ValidationError("未知数据周期: %s" % period, fields={"period": "unknown"})
 
+    review_statuses = _split(args.get("review_status"))
+    for status in review_statuses:
+        if status not in REVIEW_STATUS_LABELS:
+            raise ValidationError(
+                "未知审核状态: %s" % status, fields={"review_status": "unknown"}
+            )
+    if not review_statuses and default_review_statuses:
+        review_statuses = list(default_review_statuses)
+
     filters = {
         "station_ids": _int_list(args, "station_id"),
         "areas": _split(args.get("area")),
@@ -85,6 +100,7 @@ def parse_filters(args):
         "data_sources": _split(args.get("data_source")),
         "is_exceeded": _bool_arg(args, "is_exceeded"),
         "exceedance_status": _split(args.get("exceedance_status")),
+        "review_statuses": review_statuses,
         "date_from": _date_arg(args, "date_from"),
         "date_to": _date_arg(args, "date_to", end_of_day=True),
         "min_value": _float_arg(args, "min_value"),
@@ -121,6 +137,8 @@ def apply_filters(query, filters):
         query = query.filter(Measurement.data_source.in_(filters["data_sources"]))
     if filters["is_exceeded"] is not None:
         query = query.filter(Measurement.is_exceeded.is_(filters["is_exceeded"]))
+    if filters["review_statuses"]:
+        query = query.filter(Measurement.review_status.in_(filters["review_statuses"]))
     if filters["date_from"]:
         query = query.filter(Measurement.measured_at >= filters["date_from"])
     if filters["date_to"]:
@@ -157,8 +175,8 @@ def apply_sort(query, sort=None, order="desc"):
     return query.order_by(primary, Measurement.id.desc())
 
 
-def measurement_query(args):
-    filters = parse_filters(args)
+def measurement_query(args, default_review_statuses=None):
+    filters = parse_filters(args, default_review_statuses=default_review_statuses)
     query = apply_filters(db.session.query(Measurement), filters)
     return apply_sort(query, args.get("sort"), args.get("order")), filters
 
@@ -201,8 +219,11 @@ def _metric_expression(metric):
 
 
 def statistics(args):
-    """Grouped aggregation used by the query page statistics panel."""
-    filters = parse_filters(args)
+    """Grouped aggregation used by the query page statistics panel.
+
+    统计口径仅包含审核通过的数据, 待审核/已驳回记录不计入。
+    """
+    filters = parse_filters(args, default_review_statuses=("approved",))
     group_by = args.get("group_by") or "pollutant"
     metric = args.get("metric") or "avg"
     if group_by not in GROUP_BY_CHOICES:
@@ -321,6 +342,9 @@ def option_payload():
         "sort": list(SORT_CHOICES),
         "exceedance_status": [
             {"value": key, "label": label} for key, label in EXCEEDANCE_STATUS_LABELS.items()
+        ],
+        "review_status": [
+            {"value": key, "label": label} for key, label in REVIEW_STATUS_LABELS.items()
         ],
         "station_type": [
             {"value": key, "label": label} for key, label in STATION_TYPE_LABELS.items()

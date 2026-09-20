@@ -19,7 +19,7 @@ export default function OverviewPage() {
   if (error && !data) return <ErrorState error={error} onRetry={reload} />
   if (!data) return null
 
-  const { stations, measurements, exceedances, trend, pending_exceedances: pending } = data
+  const { stations, measurements, exceedances, review, trend, pending_exceedances: pending } = data
 
   const pendingColumns = [
     { key: 'measured_at', title: '监测时间', className: 'cell-nowrap', render: (row) => formatDateTime(row.measured_at) },
@@ -47,6 +47,13 @@ export default function OverviewPage() {
 
   return (
     <>
+      {review?.overdue > 0 ? (
+        <Alert tone="warning">
+          ⏰ 有 {review.overdue} 条监测数据提交超过 {review.overdue_hours} 小时仍未审核,{' '}
+          <Link to="/review">前往数据审核处理 →</Link>
+        </Alert>
+      ) : null}
+
       <div className="stat-grid">
         <StatCard
           label="监测点总数"
@@ -58,7 +65,17 @@ export default function OverviewPage() {
         <StatCard
           label="监测数据总量"
           value={measurements.total}
-          foot={`覆盖 ${measurements.station_count} 个监测点 · 均值 ${formatNumber(measurements.avg_value)}`}
+          foot={`已审核口径 · 覆盖 ${measurements.station_count} 个监测点 · 均值 ${formatNumber(measurements.avg_value)}`}
+        />
+        <StatCard
+          label="待审核数据"
+          value={review?.pending ?? 0}
+          tone={review?.pending ? 'warning' : undefined}
+          foot={
+            <Link to="/review">
+              前往审核工作台{review?.overdue ? ` · 超时 ${review.overdue} 条` : ''} →
+            </Link>
+          }
         />
         <StatCard
           label="超标记录"

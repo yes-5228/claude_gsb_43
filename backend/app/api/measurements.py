@@ -1,7 +1,7 @@
 """监测数据录入 API."""
 from flask import Blueprint, current_app, request
 
-from ..domain.constants import DATA_SOURCE_LABELS, PERIOD_LABELS
+from ..domain.constants import DATA_SOURCE_LABELS, PERIOD_LABELS, REVIEW_STATUS_LABELS
 from ..services import measurement_service, query_service, station_service
 from ..utils.pagination import paginate_query
 from ..utils.validation import Validator
@@ -84,6 +84,7 @@ def export_measurements():
         ("超标倍数", "exceed_ratio"),
         ("监测时间", lambda row: row.measured_at.strftime("%Y-%m-%d %H:%M")),
         ("数据来源", lambda row: DATA_SOURCE_LABELS.get(row.data_source, row.data_source)),
+        ("审核状态", lambda row: REVIEW_STATUS_LABELS.get(row.review_status, row.review_status)),
         ("录入人", "recorder"),
         ("备注", "remark"),
     ]
@@ -93,6 +94,23 @@ def export_measurements():
 @bp.get("/<int:measurement_id>")
 def get_measurement(measurement_id):
     return measurement_service.get_measurement(measurement_id).to_dict(include_station=True)
+
+
+@bp.patch("/<int:measurement_id>")
+def update_measurement(measurement_id):
+    """录入人修正数据 (驳回/待审记录): 修改后重新进入待审核."""
+    measurement = measurement_service.get_measurement(measurement_id)
+    data = json_payload()
+    validator = Validator(data)
+    value = validator.number("value", "监测值", required=True, minimum=0)
+    remark = validator.text("remark", "备注", required=False, max_length=500)
+    recorder = validator.text("recorder", "录入人", required=False, max_length=64)
+    validator.raise_if_invalid("修改信息不合法")
+
+    updated = measurement_service.update_measurement(
+        measurement, value=value, remark=remark, recorder=recorder
+    )
+    return updated.to_dict(include_station=True)
 
 
 @bp.delete("/<int:measurement_id>")

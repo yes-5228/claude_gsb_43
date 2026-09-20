@@ -77,7 +77,7 @@ def _value(pollutant, period, station_type, rng):
 
 def seed_demo_data(days=5, rng=None, recorder_pool=RECORDERS):
     """Generate demo stations and monitoring records through the normal service path."""
-    from .services import measurement_service
+    from .services import measurement_service, review_service
 
     rng = rng or random.Random(20260914)
     created_stations = []
@@ -106,7 +106,6 @@ def seed_demo_data(days=5, rng=None, recorder_pool=RECORDERS):
                 remark="日均值自动汇总",
             )
             totals["measurements"] += result["summary"]["created_count"]
-            totals["exceedances"] += result["summary"]["exceeded_count"]
 
             for hour in HOURLY_POINTS:
                 hourly_entries = [
@@ -122,7 +121,46 @@ def seed_demo_data(days=5, rng=None, recorder_pool=RECORDERS):
                     recorder=rng.choice(recorder_pool),
                 )
                 totals["measurements"] += result["summary"]["created_count"]
-                totals["exceedances"] += result["summary"]["exceeded_count"]
+
+    # 审核演示数据: 大部分通过, 少量驳回待修改, 其余留在待审核队列 (含超时未处理)
+    pending = Measurement.query.filter_by(review_status="pending").order_by(
+        Measurement.id.asc()
+    ).all()
+    reviewer_pool = ("周审核", "吴质控")
+    reject_reasons = (
+        "监测值与同时段相邻站点偏差过大, 请核对仪器状态后重新录入",
+        "录入数值小数点疑似错位, 请对照原始记录修正",
+        "该时段设备处于校准期, 数据无效, 请确认后重报",
+    )
+    approve_ids, reject_ids = [], []
+    for index, record in enumerate(pending):
+        if index % 17 == 5:
+            reject_ids.append(record.id)
+        elif index % 17 in (6, 7):
+            continue  # 留在待审核队列
+        else:
+            approve_ids.append(record.id)
+    for offset, chunk in enumerate(
+        reject_ids[i:i + 50] for i in range(0, len(reject_ids), 50)
+    ):
+        review_service.reject(
+            chunk,
+            reason=reject_reasons[offset % len(reject_reasons)],
+            reviewer=rng.choice(reviewer_pool),
+        )
+    for chunk in (approve_ids[i:i + 200] for i in range(0, len(approve_ids), 200)):
+        review_service.approve(chunk, reviewer=rng.choice(reviewer_pool))
+    totals["rejected"] = len(reject_ids)
+    totals["pending_review"] = Measurement.query.filter_by(review_status="pending").count()
+    totals["exceedances"] = Exceedance.query.count()
+
+    # 把一部分待审核记录的提交时间回拨, 演示超时未处理提醒
+    overdue_cutoff = datetime.now() - timedelta(hours=36)
+    stale = Measurement.query.filter_by(review_status="pending").limit(6).all()
+    for record in stale:
+        record.submitted_at = overdue_cutoff - timedelta(hours=rng.randint(1, 20))
+    db.session.commit()
+    totals["overdue"] = len(stale)
 
     # 标注一部分超标记录, 让工作台同时存在待办与已处理记录
     from .services import exceedance_service

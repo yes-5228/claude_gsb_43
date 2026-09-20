@@ -18,6 +18,16 @@ EXCEEDANCE_LEVEL_LABELS = {"light": "轻度超标", "moderate": "中度超标", 
 
 EXCEEDANCE_STATUS_LABELS = {"pending": "待标注", "confirmed": "已确认", "ignored": "已忽略"}
 
+# 监测数据审核工作流: 提交 -> 待审核 -> 通过/驳回 -> 驳回修改后重新送审
+REVIEW_STATUS_LABELS = {"pending": "待审核", "approved": "已通过", "rejected": "已驳回"}
+
+REVIEW_ACTION_LABELS = {
+    "submit": "提交录入",
+    "resubmit": "修改重报",
+    "approve": "审核通过",
+    "reject": "审核驳回",
+}
+
 
 def as_options(label_map):
     return [{"value": key, "label": label} for key, label in label_map.items()]
@@ -31,6 +41,8 @@ def options_payload():
         "data_source": as_options(DATA_SOURCE_LABELS),
         "exceedance_level": as_options(EXCEEDANCE_LEVEL_LABELS),
         "exceedance_status": as_options(EXCEEDANCE_STATUS_LABELS),
+        "review_status": as_options(REVIEW_STATUS_LABELS),
+        "review_action": as_options(REVIEW_ACTION_LABELS),
     }
 
 

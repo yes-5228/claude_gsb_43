@@ -167,9 +167,13 @@ export default function EntryResultPanel({ result, summary, onClose }) {
           </Alert>
         ) : null}
 
-        {payload.exceedances?.length ? (
-          <Alert tone="warning">
-            本次生成 {payload.exceedances.length} 条待标注超标记录, 请前往“超标记录标注”模块复核。
+        {!isPreview ? (
+          <Alert tone="info">
+            数据已提交并进入待审核状态, 审核通过后才纳入统计与超标判定口径
+            {payload.summary?.exceeded_count > 0
+              ? `; 本次 ${payload.summary.exceeded_count} 项超标预判将在审核通过后生成超标记录`
+              : ''}
+            。
           </Alert>
         ) : null}
       </div>

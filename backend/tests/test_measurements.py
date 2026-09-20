@@ -8,9 +8,7 @@ def test_batch_entry_creates_records_and_flags_exceedance(client, station, entry
     body = response.get_json()
     assert body["summary"]["created_count"] == 3
     assert body["summary"]["exceeded_count"] == 1
-    assert len(body["exceedances"]) == 1
-    assert body["exceedances"][0]["pollutant"] == "SO2"
-    assert body["exceedances"][0]["status"] == "pending"
+    assert body["exceedances"] == []  # 审核通过前不生成超标记录
     assert body["station"]["code"] == "TEST-001"
 
     stored = Measurement.query.filter_by(pollutant="SO2").one()
@@ -19,6 +17,20 @@ def test_batch_entry_creates_records_and_flags_exceedance(client, station, entry
     assert stored.exceed_ratio == 1.8
     assert stored.unit == "μg/m³"
     assert stored.recorder == "测试员"
+    assert stored.review_status == "pending"
+    assert Exceedance.query.count() == 0
+
+
+def test_entry_then_approve_generates_exceedance(client, station, entry_payload, approve_all):
+    client.post("/api/measurements/entries", json=entry_payload(station.id))
+    response = approve_all()
+    assert response.status_code == 200
+    assert response.get_json()["approved"] == 3
+
+    exceedance = Exceedance.query.one()
+    assert exceedance.pollutant == "SO2"
+    assert exceedance.status == "pending"
+    assert Measurement.query.filter_by(review_status="approved").count() == 3
 
 
 def test_duplicate_entry_is_reported_as_conflict(client, station, entry_payload):
@@ -30,8 +42,11 @@ def test_duplicate_entry_is_reported_as_conflict(client, station, entry_payload)
     assert Measurement.query.count() == 3
 
 
-def test_overwrite_updates_record_and_clears_exceedance(client, station, entry_payload):
+def test_overwrite_updates_record_and_clears_exceedance(
+    client, station, entry_payload, approve_all
+):
     client.post("/api/measurements/entries", json=entry_payload(station.id))
+    approve_all()
     assert Exceedance.query.count() == 1
 
     response = client.post(
@@ -47,7 +62,9 @@ def test_overwrite_updates_record_and_clears_exceedance(client, station, entry_p
     assert body["summary"]["created_count"] == 0
     assert body["summary"]["updated_count"] == 1
     assert body["summary"]["exceeded_count"] == 0
-    assert Measurement.query.filter_by(pollutant="SO2").one().is_exceeded is False
+    stored = Measurement.query.filter_by(pollutant="SO2").one()
+    assert stored.is_exceeded is False
+    assert stored.review_status == "pending"  # 数据变更后重新进入待审核
     assert Exceedance.query.count() == 0
 
 
@@ -113,10 +130,11 @@ def test_list_measurements_with_filters(client, station, entry_payload):
     assert exceeded["total"] == 1
 
 
-def test_delete_measurement_removes_exceedance(client, station, entry_payload):
-    created = client.post("/api/measurements/entries", json=entry_payload(station.id)).get_json()
-    exceeded_id = created["exceedances"][0]["measurement_id"]
-    response = client.delete("/api/measurements/%d" % exceeded_id)
+def test_delete_measurement_removes_exceedance(client, station, entry_payload, approve_all):
+    client.post("/api/measurements/entries", json=entry_payload(station.id))
+    approve_all()
+    exceeded = Measurement.query.filter_by(is_exceeded=True).one()
+    response = client.delete("/api/measurements/%d" % exceeded.id)
     assert response.status_code == 200
     assert Exceedance.query.count() == 0
     assert Measurement.query.count() == 2

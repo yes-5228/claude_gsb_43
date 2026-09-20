@@ -3,12 +3,14 @@ from .exceedances import bp as exceedances_bp
 from .measurements import bp as measurements_bp
 from .meta import bp as meta_bp
 from .query import bp as query_bp
+from .review import bp as review_bp
 from .stations import bp as stations_bp
 
 BLUEPRINTS = (
     (meta_bp, "/api/meta"),
     (stations_bp, "/api/stations"),
     (measurements_bp, "/api/measurements"),
+    (review_bp, "/api/review"),
     (exceedances_bp, "/api/exceedances"),
     (query_bp, "/api/query"),
 )

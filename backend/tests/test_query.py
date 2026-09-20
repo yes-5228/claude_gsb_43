@@ -1,7 +1,7 @@
 """数据查询与统计接口测试."""
 
 
-def _seed_two_days(client, station, entry_payload):
+def _seed_two_days(client, station, entry_payload, approve_all):
     client.post(
         "/api/measurements/entries",
         json=entry_payload(
@@ -20,10 +20,11 @@ def _seed_two_days(client, station, entry_payload):
             entries=[{"pollutant": "PM25", "value": 100.0}, {"pollutant": "SO2", "value": 100.0}],
         ),
     )
+    approve_all()
 
 
-def test_query_by_date_range_and_values(client, station, entry_payload):
-    _seed_two_days(client, station, entry_payload)
+def test_query_by_date_range_and_values(client, station, entry_payload, approve_all):
+    _seed_two_days(client, station, entry_payload, approve_all)
 
     all_rows = client.get("/api/query/measurements").get_json()
     assert all_rows["total"] == 4
@@ -55,8 +56,8 @@ def test_query_rejects_invalid_filters(client):
     assert client.get("/api/query/statistics?group_by=unknown").status_code == 422
 
 
-def test_statistics_by_pollutant_and_metric(client, station, entry_payload):
-    _seed_two_days(client, station, entry_payload)
+def test_statistics_by_pollutant_and_metric(client, station, entry_payload, approve_all):
+    _seed_two_days(client, station, entry_payload, approve_all)
     body = client.get("/api/query/statistics?group_by=pollutant&metric=avg").get_json()
     assert body["group_by"] == "pollutant"
     values = {item["key"]: item["value"] for item in body["items"]}
@@ -70,26 +71,29 @@ def test_statistics_by_pollutant_and_metric(client, station, entry_payload):
     assert exceeded == {"PM25": 1, "SO2": 1}
 
 
-def test_statistics_by_day_is_chronological(client, station, entry_payload):
-    _seed_two_days(client, station, entry_payload)
+def test_statistics_by_day_is_chronological(client, station, entry_payload, approve_all):
+    _seed_two_days(client, station, entry_payload, approve_all)
     body = client.get("/api/query/statistics?group_by=day&metric=avg").get_json()
     assert [item["key"] for item in body["items"]] == ["2026-09-01", "2026-09-02"]
     assert body["totals"]["count"] == 4
 
 
-def test_statistics_by_station_uses_station_labels(client, station, second_station, entry_payload):
-    _seed_two_days(client, station, entry_payload)
+def test_statistics_by_station_uses_station_labels(
+    client, station, second_station, entry_payload, approve_all
+):
+    _seed_two_days(client, station, entry_payload, approve_all)
     client.post(
         "/api/measurements/entries",
         json=entry_payload(second_station.id, entries=[{"pollutant": "PM25", "value": 30.0}]),
     )
+    approve_all()
     body = client.get("/api/query/statistics?group_by=station&metric=count").get_json()
     labels = {item["key"]: item["label"] for item in body["items"]}
     assert labels["TEST-002"] == "TEST-002 工业园监测点"
 
 
-def test_query_export_respects_filters(client, station, entry_payload):
-    _seed_two_days(client, station, entry_payload)
+def test_query_export_respects_filters(client, station, entry_payload, approve_all):
+    _seed_two_days(client, station, entry_payload, approve_all)
     response = client.get("/api/query/export?pollutant=PM25")
     assert response.status_code == 200
     lines = response.get_data(as_text=True).strip().splitlines()

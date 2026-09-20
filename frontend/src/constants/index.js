@@ -1,9 +1,10 @@
 export const NAV_ITEMS = [
-  { to: '/overview', label: '运行概览', icon: '📊', title: '运行概览', subtitle: '监测点规模、数据量与超标待办一览' },
+  { to: '/overview', label: '运行概览', icon: '📊', title: '运行概览', subtitle: '监测点规模、数据量与审核/超标待办一览' },
   { to: '/stations', label: '监测点台账', icon: '📍', title: '监测点台账', subtitle: '维护监测点档案、点位信息与运行状态' },
-  { to: '/measurements', label: '监测数据录入', icon: '✍️', title: '监测数据录入', subtitle: '按“监测点 + 时刻”成组录入各因子浓度' },
+  { to: '/measurements', label: '监测数据录入', icon: '✍️', title: '监测数据录入', subtitle: '按“监测点 + 时刻”成组录入各因子浓度, 提交后进入待审核' },
+  { to: '/review', label: '数据审核', icon: '✅', title: '监测数据审核', subtitle: '审核待办、超时提醒与审核记录追溯' },
   { to: '/exceedances', label: '超标记录标注', icon: '⚠️', title: '超标记录标注', subtitle: '复核超标记录, 标注确认或忽略原因' },
-  { to: '/query', label: '数据查询', icon: '🔍', title: '数据查询', subtitle: '多条件检索、聚合统计与结果导出' }
+  { to: '/query', label: '数据查询', icon: '🔍', title: '数据查询', subtitle: '多条件检索、聚合统计与结果导出 (已审核口径)' }
 ]
 
 export const PAGE_SIZE_OPTIONS = [10, 20, 50, 100]
@@ -12,9 +13,13 @@ export const STATION_STATUS_TONE = { active: 'success', maintenance: 'warning', 
 export const EXCEEDANCE_STATUS_TONE = { pending: 'warning', confirmed: 'danger', ignored: 'neutral' }
 export const EXCEEDANCE_LEVEL_TONE = { light: 'info', moderate: 'warning', severe: 'danger' }
 export const DATA_SOURCE_TONE = { manual: 'primary', device: 'info', import: 'neutral' }
+export const REVIEW_STATUS_TONE = { pending: 'warning', approved: 'success', rejected: 'danger' }
 
 export const EXCEEDANCE_LEVEL_LABELS = { light: '轻度超标', moderate: '中度超标', severe: '重度超标' }
 export const EXCEEDANCE_STATUS_LABELS = { pending: '待标注', confirmed: '已确认', ignored: '已忽略' }
+export const REVIEW_STATUS_LABELS = { pending: '待审核', approved: '已通过', rejected: '已驳回' }
+export const REVIEW_ACTION_LABELS = { submit: '提交录入', resubmit: '修改重报', approve: '审核通过', reject: '审核驳回' }
+export const REVIEW_ACTION_TONE = { submit: 'primary', resubmit: 'info', approve: 'success', reject: 'danger' }
 
 export const POLLUTANT_CODE_LABELS = {
   PM25: 'PM2.5',

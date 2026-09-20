@@ -23,6 +23,7 @@ const INITIAL_FILTERS = {
   is_exceeded: '',
   exceedance_status: '',
   data_source: '',
+  review_status: '',
   date_from: '',
   date_to: '',
   min_value: '',
@@ -73,7 +74,11 @@ export default function QueryPage() {
       {query.error ? <Alert tone="error">{query.error.message}</Alert> : null}
 
       <div className="stat-grid">
-        <StatCard label="符合条件的数据量" value={summary ? summary.total : '-'} foot={summary ? `涉及 ${summary.station_count} 个监测点` : ''} />
+        <StatCard
+          label="符合条件的数据量"
+          value={summary ? summary.total : '-'}
+          foot={summary ? `涉及 ${summary.station_count} 个监测点 · ${query.filters.review_status ? '按所选审核状态' : '仅含已审核数据'}` : ''}
+        />
         <StatCard
           label="超标记录"
           value={summary ? summary.exceeded_count : '-'}

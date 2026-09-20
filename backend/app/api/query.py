@@ -11,7 +11,10 @@ bp = Blueprint("query", __name__)
 
 @bp.get("/measurements")
 def query_measurements():
-    query, filters = query_service.measurement_query(request.args)
+    """数据查询: 默认仅统计审核通过的数据 (可用 review_status 显式调整)."""
+    query, filters = query_service.measurement_query(
+        request.args, default_review_statuses=("approved",)
+    )
     result = paginate_query(query, lambda row: row.to_dict(include_station=True))
     result["summary"] = query_service.summary(filters)
     result["applied_filters"] = filters
@@ -27,7 +30,9 @@ def query_statistics():
 def query_export():
     from ..utils.csv_export import csv_response
 
-    query, _ = query_service.measurement_query(request.args)
+    query, _ = query_service.measurement_query(
+        request.args, default_review_statuses=("approved",)
+    )
     rows = query.limit(current_app.config["MAX_EXPORT_ROWS"]).all()
     columns = [
         ("站点编码", lambda row: row.station.code if row.station else ""),

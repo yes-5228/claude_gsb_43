@@ -38,6 +38,9 @@ class BaseConfig:
     MAX_BATCH_SIZE = 500
     MAX_EXPORT_ROWS = 20000
 
+    # 待审核数据超过该时长未处理即视为超时, 触发页面提醒
+    REVIEW_OVERDUE_HOURS = int(os.getenv("REVIEW_OVERDUE_HOURS", "24"))
+
     AUTO_INIT_DB = _as_bool(os.getenv("AUTO_INIT_DB"), True)
     AUTO_SEED = _as_bool(os.getenv("AUTO_SEED"), True)
 

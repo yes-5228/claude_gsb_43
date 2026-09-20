@@ -3,7 +3,7 @@ from app.models import Exceedance
 
 
 def _make_exceedances(client, station, entry_payload, measured_at="2026-09-01 10:00"):
-    return client.post(
+    body = client.post(
         "/api/measurements/entries",
         json=entry_payload(
             station.id,
@@ -15,6 +15,9 @@ def _make_exceedances(client, station, entry_payload, measured_at="2026-09-01 10
             ],
         ),
     ).get_json()
+    ids = [item["id"] for item in body["created"]]
+    client.post("/api/review/approve", json={"ids": ids, "reviewer": "审核员"})
+    return body
 
 
 def test_exceedance_records_are_created_automatically(client, station, entry_payload):

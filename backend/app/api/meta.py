@@ -8,13 +8,14 @@ from ..domain.constants import (
     EXCEEDANCE_LEVEL_LABELS,
     EXCEEDANCE_STATUS_LABELS,
     PERIOD_LABELS,
+    REVIEW_STATUS_LABELS,
     STATION_STATUS_LABELS,
     STATION_TYPE_LABELS,
     options_payload,
 )
 from ..domain.standards import POLLUTANTS
 from ..extensions import db
-from ..services import exceedance_service, query_service, station_service
+from ..services import exceedance_service, query_service, review_service, station_service
 
 bp = Blueprint("meta", __name__)
 
@@ -54,7 +55,7 @@ def options():
 
 @bp.get("/overview")
 def overview():
-    """首页概览: 台账规模 / 数据量 / 超标待办 / 近 7 日趋势."""
+    """首页概览: 台账规模 / 数据量(已审核口径) / 审核待办 / 超标待办 / 近 7 日趋势."""
     today = date.today()
     trend_args = {
         "group_by": "day",
@@ -62,7 +63,7 @@ def overview():
         "date_from": (today - timedelta(days=6)).isoformat(),
     }
     trend = query_service.statistics(trend_args)
-    filters = query_service.parse_filters({})
+    filters = query_service.parse_filters({}, default_review_statuses=("approved",))
 
     pending_args = {"status": "pending"}
     pending_records = (
@@ -74,6 +75,7 @@ def overview():
         "stations": station_service.metadata_summary(),
         "measurements": query_service.summary(filters),
         "exceedances": exceedance_service.summary({}),
+        "review": review_service.summary(),
         "pending_exceedances": [record.to_dict() for record in pending_records],
         "trend": trend,
         "labels": {
@@ -82,6 +84,7 @@ def overview():
             "exceedance_status": EXCEEDANCE_STATUS_LABELS,
             "exceedance_level": EXCEEDANCE_LEVEL_LABELS,
             "data_source": DATA_SOURCE_LABELS,
+            "review_status": REVIEW_STATUS_LABELS,
         },
         "generated_at": datetime.now().isoformat(timespec="seconds"),
     }

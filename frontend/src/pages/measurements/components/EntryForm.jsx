@@ -148,9 +148,9 @@ export default function EntryForm({ onPreview, onSubmitted }) {
       onSubmitted?.(result)
       const written = result.summary.created_count + result.summary.updated_count
       if (result.summary.exceeded_count > 0) {
-        toast.warning(`写入 ${written} 条数据, 其中 ${result.summary.exceeded_count} 项超标已生成待标注记录`)
+        toast.warning(`已提交 ${written} 条数据待审核, 其中 ${result.summary.exceeded_count} 项超标预判将在审核通过后生成超标记录`)
       } else {
-        toast.success(`录入成功, 共写入 ${written} 条数据`)
+        toast.success(`录入成功, 已提交 ${written} 条数据进入待审核`)
       }
     } catch (error) {
       setErrors(error.fields || {})

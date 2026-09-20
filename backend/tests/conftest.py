@@ -2,7 +2,7 @@ import pytest
 
 from app import create_app
 from app.extensions import db
-from app.models import Station
+from app.models import Measurement, Station
 from app.services import station_service
 
 
@@ -83,3 +83,17 @@ def entry_payload():
 @pytest.fixture
 def station_model():
     return Station
+
+
+@pytest.fixture
+def approve_all(client):
+    """审核通过当前所有待审核数据, 返回审核接口响应."""
+    def _approve(reviewer="审核员"):
+        ids = [
+            row.id for row in Measurement.query.filter_by(review_status="pending").all()
+        ]
+        if not ids:
+            return None
+        return client.post("/api/review/approve", json={"ids": ids, "reviewer": reviewer})
+
+    return _approve
