@@ -1,4 +1,8 @@
-"""监测数据查询: 过滤条件解析, 统计聚合与导出数据准备."""
+"""监测数据查询: 过滤条件解析, 统计聚合与导出数据准备.
+
+统计口径约定: summary / statistics 只统计审核通过 (approved) 的数据;
+列表与导出默认展示全部状态, 可用 review_status 参数筛选。
+"""
 from datetime import datetime, time
 
 from sqlalchemy import cast, func, or_
@@ -7,6 +11,7 @@ from ..domain.constants import (
     DATA_SOURCE_LABELS,
     EXCEEDANCE_STATUS_LABELS,
     PERIOD_LABELS,
+    REVIEW_STATUS_LABELS,
     STATION_TYPE_LABELS,
 )
 from ..domain.standards import POLLUTANT_CODES, get_pollutant
@@ -76,6 +81,14 @@ def parse_filters(args):
         if period not in PERIOD_LABELS:
             raise ValidationError("未知数据周期: %s" % period, fields={"period": "unknown"})
 
+    review_statuses = _split(args.get("review_status"))
+    unknown_status = [item for item in review_statuses if item not in REVIEW_STATUS_LABELS]
+    if unknown_status:
+        raise ValidationError(
+            "未知审核状态: %s" % ", ".join(unknown_status),
+            fields={"review_status": "unknown"},
+        )
+
     filters = {
         "station_ids": _int_list(args, "station_id"),
         "areas": _split(args.get("area")),
@@ -85,6 +98,7 @@ def parse_filters(args):
         "data_sources": _split(args.get("data_source")),
         "is_exceeded": _bool_arg(args, "is_exceeded"),
         "exceedance_status": _split(args.get("exceedance_status")),
+        "review_statuses": review_statuses,
         "date_from": _date_arg(args, "date_from"),
         "date_to": _date_arg(args, "date_to", end_of_day=True),
         "min_value": _float_arg(args, "min_value"),
@@ -121,6 +135,8 @@ def apply_filters(query, filters):
         query = query.filter(Measurement.data_source.in_(filters["data_sources"]))
     if filters["is_exceeded"] is not None:
         query = query.filter(Measurement.is_exceeded.is_(filters["is_exceeded"]))
+    if filters["review_statuses"]:
+        query = query.filter(Measurement.review_status.in_(filters["review_statuses"]))
     if filters["date_from"]:
         query = query.filter(Measurement.measured_at >= filters["date_from"])
     if filters["date_to"]:
@@ -164,7 +180,10 @@ def measurement_query(args):
 
 
 def summary(filters):
-    """Aggregate counters shown above the query result table."""
+    """Aggregate counters shown above the query result table.
+
+    统计口径: 仅审核通过 (approved) 的数据纳入统计。
+    """
     query = apply_filters(
         db.session.query(
             func.count(Measurement.id),
@@ -175,7 +194,7 @@ def summary(filters):
             func.avg(Measurement.value),
         ),
         filters,
-    )
+    ).filter(Measurement.review_status == "approved")
     total, exceeded, stations, first_at, last_at, avg_value = query.one()
     total = int(total or 0)
     exceeded = int(exceeded or 0)
@@ -187,6 +206,7 @@ def summary(filters):
         "first_measured_at": iso(first_at),
         "last_measured_at": iso(last_at),
         "avg_value": round(float(avg_value), 2) if avg_value is not None else None,
+        "scope": "approved",
     }
 
 
@@ -256,7 +276,7 @@ def statistics(args):
         ).group_by(column)
         is_time_group = False
 
-    query = apply_filters(query, filters)
+    query = apply_filters(query, filters).filter(Measurement.review_status == "approved")
     rows = query.all()
 
     items = []
@@ -321,6 +341,9 @@ def option_payload():
         "sort": list(SORT_CHOICES),
         "exceedance_status": [
             {"value": key, "label": label} for key, label in EXCEEDANCE_STATUS_LABELS.items()
+        ],
+        "review_status": [
+            {"value": key, "label": label} for key, label in REVIEW_STATUS_LABELS.items()
         ],
         "station_type": [
             {"value": key, "label": label} for key, label in STATION_TYPE_LABELS.items()

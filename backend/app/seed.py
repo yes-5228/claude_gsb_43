@@ -2,6 +2,8 @@
 import random
 from datetime import date, datetime, timedelta
 
+from sqlalchemy import inspect, text
+
 from .extensions import db
 from .models import Exceedance, Measurement, Station
 
@@ -63,6 +65,7 @@ STATION_FACTOR = {
 }
 HOURLY_POINTS = (2, 8, 14, 20)
 RECORDERS = ("李静", "王敏", "陈志强", "赵宇", "孙倩")
+REVIEWERS = ("刘洋", "周慧")
 
 
 def _value(pollutant, period, station_type, rng):
@@ -106,7 +109,6 @@ def seed_demo_data(days=5, rng=None, recorder_pool=RECORDERS):
                 remark="日均值自动汇总",
             )
             totals["measurements"] += result["summary"]["created_count"]
-            totals["exceedances"] += result["summary"]["exceeded_count"]
 
             for hour in HOURLY_POINTS:
                 hourly_entries = [
@@ -122,7 +124,38 @@ def seed_demo_data(days=5, rng=None, recorder_pool=RECORDERS):
                     recorder=rng.choice(recorder_pool),
                 )
                 totals["measurements"] += result["summary"]["created_count"]
-                totals["exceedances"] += result["summary"]["exceeded_count"]
+
+    # 审核工作流演示: 大部分数据审核通过进入统计口径, 少量留作待审核 (含超时未处理)
+    from .services import review_service
+
+    measurements = Measurement.query.order_by(Measurement.id.asc()).all()
+    approve_ids = [row.id for index, row in enumerate(measurements) if index % 10 != 9]
+    if approve_ids:
+        review_service.review_batch(
+            approve_ids, "approve", reviewer=rng.choice(REVIEWERS), reason="周期性批量复核通过"
+        )
+    totals["approved"] = len(approve_ids)
+    totals["pending_review"] = len(measurements) - len(approve_ids)
+
+    # 让一部分待审核数据的提交时间早于超时阈值, 用于演示超时未处理提醒
+    timeout_hours = 24
+    try:
+        from flask import current_app
+
+        timeout_hours = int(current_app.config.get("REVIEW_TIMEOUT_HOURS", 24))
+    except RuntimeError:  # pragma: no cover - 无应用上下文时退化为默认值
+        pass
+    pending_rows = (
+        Measurement.query.filter_by(review_status="pending").order_by(Measurement.id.asc()).all()
+    )
+    now = datetime.now()
+    for index, row in enumerate(pending_rows):
+        if index % 2 == 0:
+            row.created_at = now - timedelta(hours=timeout_hours + 4 + index)
+            db.session.add(row)
+    db.session.commit()
+
+    totals["exceedances"] = Exceedance.query.count()
 
     # 标注一部分超标记录, 让工作台同时存在待办与已处理记录
     from .services import exceedance_service
@@ -152,6 +185,30 @@ def reset_database():
     db.create_all()
 
 
+def ensure_schema_upgrades():
+    """为审核工作流之前创建的存量数据库补充审核列, 历史数据视为已审核通过."""
+    inspector = inspect(db.engine)
+    if "measurements" not in inspector.get_table_names():
+        return
+    existing = {column["name"] for column in inspector.get_columns("measurements")}
+    additions = []
+    if "review_status" not in existing:
+        additions.append(("review_status", "VARCHAR(16) NOT NULL DEFAULT 'pending'"))
+    if "reviewed_at" not in existing:
+        additions.append(("reviewed_at", "TIMESTAMP"))
+    if "reviewer" not in existing:
+        additions.append(("reviewer", "VARCHAR(64)"))
+    if "review_reason" not in existing:
+        additions.append(("review_reason", "TEXT"))
+    if not additions:
+        return
+    with db.engine.begin() as connection:
+        for name, ddl in additions:
+            connection.execute(text("ALTER TABLE measurements ADD COLUMN %s %s" % (name, ddl)))
+        # 存量数据此前已在统计口径内, 迁移后直接视为审核通过
+        connection.execute(text("UPDATE measurements SET review_status = 'approved'"))
+
+
 def ensure_bootstrap(app):
     """Create tables / seed demo data at startup when enabled by config."""
     auto_init = app.config.get("AUTO_INIT_DB")
@@ -162,6 +219,7 @@ def ensure_bootstrap(app):
         try:
             if auto_init:
                 db.create_all()
+                ensure_schema_upgrades()
             if auto_seed and db.session.query(Station.id).first() is None:
                 app.logger.info("seeding demo data ...")
                 seed_demo_data()

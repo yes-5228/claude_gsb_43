@@ -1,5 +1,10 @@
 """监测数据记录."""
-from ..domain.constants import DATA_SOURCE_LABELS, PERIOD_LABELS, label_of
+from ..domain.constants import (
+    DATA_SOURCE_LABELS,
+    PERIOD_LABELS,
+    REVIEW_STATUS_LABELS,
+    label_of,
+)
 from ..domain.standards import get_pollutant
 from ..extensions import db
 from .base import TimestampMixin, iso
@@ -29,6 +34,11 @@ class Measurement(TimestampMixin, db.Model):
     data_source = db.Column(db.String(16), nullable=False, default="manual")
     recorder = db.Column(db.String(64))
     remark = db.Column(db.Text)
+    # 审核工作流: 录入后先进入待审核, 审核通过才纳入统计与超标判定口径
+    review_status = db.Column(db.String(16), nullable=False, default="pending", index=True)
+    reviewed_at = db.Column(db.DateTime)
+    reviewer = db.Column(db.String(64))
+    review_reason = db.Column(db.Text)
 
     station = db.relationship("Station", back_populates="measurements")
     exceedance = db.relationship(
@@ -37,6 +47,13 @@ class Measurement(TimestampMixin, db.Model):
         uselist=False,
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+    review_records = db.relationship(
+        "ReviewRecord",
+        back_populates="measurement",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="ReviewRecord.created_at.desc()",
     )
 
     def pollutant_label(self):
@@ -61,6 +78,11 @@ class Measurement(TimestampMixin, db.Model):
             "data_source_label": label_of(DATA_SOURCE_LABELS, self.data_source),
             "recorder": self.recorder,
             "remark": self.remark,
+            "review_status": self.review_status,
+            "review_status_label": label_of(REVIEW_STATUS_LABELS, self.review_status),
+            "reviewed_at": iso(self.reviewed_at),
+            "reviewer": self.reviewer,
+            "review_reason": self.review_reason,
             "created_at": iso(self.created_at),
             "updated_at": iso(self.updated_at),
             "exceedance_id": self.exceedance.id if self.exceedance else None,

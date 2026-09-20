@@ -41,7 +41,7 @@ export default function EntryResultPanel({ result, summary, onClose }) {
           <div className="stack">
             <div className="stat-grid">
               <div className="stat-card">
-                <div className="stat-label">当前筛选记录数</div>
+                <div className="stat-label">已审核数据 (当前筛选)</div>
                 <div className="stat-value">{summary.total}</div>
               </div>
               <div className="stat-card">
@@ -61,6 +61,8 @@ export default function EntryResultPanel({ result, summary, onClose }) {
               <dd>{formatDateTime(summary.last_measured_at)}</dd>
               <dt>均值</dt>
               <dd>{formatNumber(summary.avg_value)}</dd>
+              <dt>统计口径</dt>
+              <dd>仅审核通过的数据</dd>
             </dl>
           </div>
         ) : (
@@ -167,9 +169,18 @@ export default function EntryResultPanel({ result, summary, onClose }) {
           </Alert>
         ) : null}
 
-        {payload.exceedances?.length ? (
+        {!isPreview && payload.review ? (
+          <Alert tone="info">
+            本次提交 {payload.review.count} 条数据已进入待审核状态, 审核通过后纳入统计与超标判定口径;
+            可在“数据审核”模块查看待审核队列。
+          </Alert>
+        ) : null}
+
+        {payload.exceedance_previews?.length ? (
           <Alert tone="warning">
-            本次生成 {payload.exceedances.length} 条待标注超标记录, 请前往“超标记录标注”模块复核。
+            本次有 {payload.exceedance_previews.length} 项预判超标 (
+            {payload.exceedance_previews.map((item) => item.pollutant_label).join(', ')}
+            ), 审核通过后将生成待标注超标记录。
           </Alert>
         ) : null}
       </div>

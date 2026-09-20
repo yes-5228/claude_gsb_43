@@ -148,9 +148,11 @@ export default function EntryForm({ onPreview, onSubmitted }) {
       onSubmitted?.(result)
       const written = result.summary.created_count + result.summary.updated_count
       if (result.summary.exceeded_count > 0) {
-        toast.warning(`写入 ${written} 条数据, 其中 ${result.summary.exceeded_count} 项超标已生成待标注记录`)
+        toast.warning(
+          `已提交 ${written} 条数据待审核, 其中 ${result.summary.exceeded_count} 项预判超标, 审核通过后生成超标记录`
+        )
       } else {
-        toast.success(`录入成功, 共写入 ${written} 条数据`)
+        toast.success(`已提交 ${written} 条数据, 待审核通过后纳入统计口径`)
       }
     } catch (error) {
       setErrors(error.fields || {})
@@ -260,7 +262,7 @@ export default function EntryForm({ onPreview, onSubmitted }) {
             onChange={setField('overwrite')}
           />
           <div className="small muted" style={{ marginTop: 4 }}>
-            勾选后重复提交将更新原记录并重新判定超标
+            勾选后重复提交将更新原记录并重新进入待审核; 被驳回的数据修改后同样需重新审核
           </div>
         </div>
 

@@ -13,6 +13,12 @@ const EXCEEDED_OPTIONS = [
   { value: 'false', label: '仅达标' }
 ]
 
+const REVIEW_STATUS_OPTIONS = [
+  { value: 'pending', label: '待审核' },
+  { value: 'approved', label: '审核通过' },
+  { value: 'rejected', label: '已驳回' }
+]
+
 export default function MeasurementFilters({ value, loading, onSubmit, onReset }) {
   const [draft, setDraft] = useState(value)
   const { data: stationData } = useStationOptions()
@@ -29,7 +35,7 @@ export default function MeasurementFilters({ value, loading, onSubmit, onReset }
       loading={loading}
       onSearch={() => onSubmit(draft)}
       onReset={() => {
-        setDraft({ station_id: '', pollutant: '', period: '', is_exceeded: '', date_from: '', date_to: '' })
+        setDraft({ station_id: '', pollutant: '', period: '', is_exceeded: '', review_status: '', date_from: '', date_to: '' })
         onReset()
       }}
     >
@@ -57,6 +63,9 @@ export default function MeasurementFilters({ value, loading, onSubmit, onReset }
       </Field>
       <Field label="超标情况">
         <Select value={draft.is_exceeded || ''} onChange={update('is_exceeded')} placeholder="全部" options={EXCEEDED_OPTIONS} />
+      </Field>
+      <Field label="审核状态">
+        <Select value={draft.review_status || ''} onChange={update('review_status')} placeholder="全部状态" options={REVIEW_STATUS_OPTIONS} />
       </Field>
       <Field label="开始日期">
         <Input type="date" value={draft.date_from || ''} onChange={update('date_from')} />

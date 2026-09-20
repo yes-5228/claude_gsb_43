@@ -25,6 +25,12 @@ const SOURCE_OPTIONS = [
   { value: 'import', label: '历史导入' }
 ]
 
+const REVIEW_STATUS_OPTIONS = [
+  { value: 'pending', label: '待审核' },
+  { value: 'approved', label: '审核通过' },
+  { value: 'rejected', label: '已驳回' }
+]
+
 export default function QueryFilters({ value, loading, onSubmit, onReset }) {
   const [draft, setDraft] = useState(value)
   const { data: stationData } = useStationOptions()
@@ -43,7 +49,7 @@ export default function QueryFilters({ value, loading, onSubmit, onReset }) {
       onReset={() => {
         setDraft({
           keyword: '', station_id: '', area: '', pollutant: '', period: '',
-          is_exceeded: '', exceedance_status: '', data_source: '',
+          is_exceeded: '', exceedance_status: '', data_source: '', review_status: '',
           date_from: '', date_to: '', min_value: '', max_value: ''
         })
         onReset()
@@ -97,6 +103,9 @@ export default function QueryFilters({ value, loading, onSubmit, onReset }) {
       </Field>
       <Field label="数据来源">
         <Select value={draft.data_source || ''} onChange={update('data_source')} placeholder="全部来源" options={SOURCE_OPTIONS} />
+      </Field>
+      <Field label="审核状态">
+        <Select value={draft.review_status || ''} onChange={update('review_status')} placeholder="全部状态" options={REVIEW_STATUS_OPTIONS} />
       </Field>
       <Field label="开始日期">
         <Input type="date" value={draft.date_from || ''} onChange={update('date_from')} />

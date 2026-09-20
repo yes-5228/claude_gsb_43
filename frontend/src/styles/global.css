@@ -167,6 +167,8 @@ table.data-table td { padding: 10px 12px; border-bottom: 1px solid #eef2f7; vert
 table.data-table tbody tr:hover { background: #fafbff; }
 table.data-table tbody tr.selected { background: var(--primary-soft); }
 table.data-table tbody tr.clickable { cursor: pointer; }
+table.data-table tbody tr.row-overdue { background: var(--danger-soft); }
+table.data-table tbody tr.row-overdue:hover { background: #fbe4e4; }
 .cell-nowrap { white-space: nowrap; }
 .table-caption { padding: 12px 18px; font-size: 12px; color: var(--text-muted); border-top: 1px solid var(--border); }
 

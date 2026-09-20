@@ -23,6 +23,7 @@ const INITIAL_FILTERS = {
   is_exceeded: '',
   exceedance_status: '',
   data_source: '',
+  review_status: '',
   date_from: '',
   date_to: '',
   min_value: '',
@@ -73,14 +74,14 @@ export default function QueryPage() {
       {query.error ? <Alert tone="error">{query.error.message}</Alert> : null}
 
       <div className="stat-grid">
-        <StatCard label="符合条件的数据量" value={summary ? summary.total : '-'} foot={summary ? `涉及 ${summary.station_count} 个监测点` : ''} />
+        <StatCard label="符合条件的数据量" value={summary ? summary.total : '-'} foot={summary ? `涉及 ${summary.station_count} 个监测点 · 仅审核通过` : ''} />
         <StatCard
           label="超标记录"
           value={summary ? summary.exceeded_count : '-'}
           tone={summary?.exceeded_count ? 'danger' : undefined}
           foot={summary ? `超标率 ${formatPercent(summary.exceed_rate)}` : ''}
         />
-        <StatCard label="平均浓度" value={summary ? formatNumber(summary.avg_value) : '-'} foot="按当前筛选范围计算" />
+        <StatCard label="平均浓度" value={summary ? formatNumber(summary.avg_value) : '-'} foot="按当前筛选范围计算, 仅审核通过数据" />
         <StatCard
           label="时间范围"
           value={summary ? formatDateTime(summary.first_measured_at).slice(5, 10) : '-'}

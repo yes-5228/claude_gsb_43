@@ -22,6 +22,7 @@ const INITIAL_FILTERS = {
   pollutant: '',
   period: '',
   is_exceeded: '',
+  review_status: '',
   date_from: '',
   date_to: ''
 }
@@ -91,7 +92,7 @@ export default function MeasurementsPage() {
 
       <SectionCard
         title="最近录入的数据"
-        hint="按监测时间倒序展示, 便于核对刚提交的记录"
+        hint="按监测时间倒序展示, 数据需审核通过后才纳入统计与超标判定口径"
         actions={
           <>
             <button type="button" className="btn btn-sm" onClick={query.reload} disabled={query.loading}>
@@ -124,7 +125,7 @@ export default function MeasurementsPage() {
         busy={deleting}
         title="删除监测数据"
         message={`确认删除 ${pendingDelete?.pollutant_label || ''} 的这条记录吗?`}
-        detail="若该记录已产生超标记录, 对应的标注信息也会一并删除。"
+        detail="若该记录已产生超标记录, 对应的标注信息与审核记录也会一并删除。"
         confirmText="确认删除"
         onConfirm={handleDelete}
         onCancel={() => setPendingDelete(null)}

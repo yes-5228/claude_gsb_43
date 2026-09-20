@@ -2,7 +2,7 @@ import pytest
 
 from app import create_app
 from app.extensions import db
-from app.models import Station
+from app.models import Measurement, Station
 from app.services import station_service
 
 
@@ -83,3 +83,21 @@ def entry_payload():
 @pytest.fixture
 def station_model():
     return Station
+
+
+@pytest.fixture
+def approve_all(client):
+    """Approve every pending measurement through the review API (统计口径前置步骤)."""
+
+    def _approve(reviewer="审核员"):
+        ids = [row.id for row in Measurement.query.filter_by(review_status="pending").all()]
+        if not ids:
+            return {"updated": 0, "updated_ids": []}
+        response = client.post(
+            "/api/reviews/batch",
+            json={"ids": ids, "action": "approve", "reviewer": reviewer},
+        )
+        assert response.status_code == 200
+        return response.get_json()
+
+    return _approve

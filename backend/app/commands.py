@@ -8,8 +8,11 @@ from .models import Exceedance, Measurement, Station
 def register_commands(app):
     @app.cli.command("init-db")
     def init_db():
-        """Create database tables."""
+        """Create database tables and apply lightweight column upgrades."""
+        from .seed import ensure_schema_upgrades
+
         db.create_all()
+        ensure_schema_upgrades()
         click.echo("数据库表已创建")
 
     @app.cli.command("seed")
@@ -44,11 +47,15 @@ def register_commands(app):
     @app.cli.command("stats")
     def stats():
         """Print a short record summary."""
+        from .models import ReviewRecord
+
         click.echo(
-            "监测点 %d 个 / 监测数据 %d 条 / 超标记录 %d 条"
+            "监测点 %d 个 / 监测数据 %d 条 (待审核 %d) / 超标记录 %d 条 / 审核记录 %d 条"
             % (
                 Station.query.count(),
                 Measurement.query.count(),
+                Measurement.query.filter_by(review_status="pending").count(),
                 Exceedance.query.count(),
+                ReviewRecord.query.count(),
             )
         )

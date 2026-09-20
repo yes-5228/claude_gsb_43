@@ -1,6 +1,6 @@
 import DataTable from '../../../components/common/DataTable.jsx'
 import Tag from '../../../components/common/Tag.jsx'
-import { DATA_SOURCE_TONE } from '../../../constants/index.js'
+import { DATA_SOURCE_TONE, REVIEW_STATUS_TONE } from '../../../constants/index.js'
 import { formatDateTime, formatNumber, formatRatio } from '../../../utils/format.js'
 
 export default function MeasurementTable({ rows, loading, onDelete }) {
@@ -40,6 +40,25 @@ export default function MeasurementTable({ rows, loading, onDelete }) {
       title: '超标判定',
       render: (row) =>
         row.is_exceeded ? <Tag tone="danger">{formatRatio(row.exceed_ratio)}</Tag> : <Tag tone="success">达标</Tag>
+    },
+    {
+      key: 'review_status',
+      title: '审核状态',
+      render: (row) => (
+        <div>
+          <Tag tone={REVIEW_STATUS_TONE[row.review_status]}>{row.review_status_label}</Tag>
+          {row.review_status === 'rejected' && row.review_reason ? (
+            <div className="small danger-text" style={{ marginTop: 4 }} title={row.review_reason}>
+              驳回原因: {row.review_reason}
+            </div>
+          ) : null}
+          {row.review_status === 'approved' && row.reviewer ? (
+            <div className="small muted" style={{ marginTop: 4 }}>
+              {row.reviewer} · {formatDateTime(row.reviewed_at)}
+            </div>
+          ) : null}
+        </div>
+      )
     },
     {
       key: 'data_source_label',

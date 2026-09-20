@@ -1,6 +1,6 @@
 import DataTable from '../../../components/common/DataTable.jsx'
 import Tag from '../../../components/common/Tag.jsx'
-import { DATA_SOURCE_TONE, EXCEEDANCE_STATUS_TONE } from '../../../constants/index.js'
+import { DATA_SOURCE_TONE, EXCEEDANCE_STATUS_TONE, REVIEW_STATUS_TONE } from '../../../constants/index.js'
 import { formatDateTime, formatNumber } from '../../../utils/format.js'
 
 export default function QueryResultTable({ rows, loading }) {
@@ -25,6 +25,15 @@ export default function QueryResultTable({ rows, loading }) {
       key: 'is_exceeded',
       title: '超标',
       render: (row) => (row.is_exceeded ? <Tag tone="danger">是</Tag> : <Tag tone="success">否</Tag>)
+    },
+    {
+      key: 'review_status',
+      title: '审核状态',
+      render: (row) => (
+        <Tag tone={REVIEW_STATUS_TONE[row.review_status]} title={row.review_reason || undefined}>
+          {row.review_status_label}
+        </Tag>
+      )
     },
     {
       key: 'exceedance_status',

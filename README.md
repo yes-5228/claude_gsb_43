@@ -1,6 +1,6 @@
 # 空气监测点数据录入系统
 
-面向空气质量监测业务的**监测点台账 + 监测数据录入 + 超标记录标注 + 数据查询**一体化系统。
+面向空气质量监测业务的**监测点台账 + 监测数据录入 + 数据审核 + 超标记录标注 + 数据查询**一体化系统。
 后端使用 Flask + SQLAlchemy 以蓝图/服务分层组织, 前端使用 React + Vite 按业务模块拆分页面,
 超标判定严格依据 **GB 3095-2012《环境空气质量标准》二级浓度限值** 自动完成。
 
@@ -8,15 +8,17 @@
 
 | 模块 | 路由 | 主要能力 |
 | --- | --- | --- |
-| 运行概览 | `/overview` | 监测点规模、数据总量、超标与待标注统计、近 7 日数据量趋势、待办超标列表 |
+| 运行概览 | `/overview` | 监测点规模、数据总量、待审核与超时提醒、超标与待标注统计、近 7 日数据量趋势 |
 | 监测点台账 | `/stations` | 台账增删改查、区域/类型/状态筛选、点位详情与分因子统计、级联清理关联数据 |
-| 监测数据录入 | `/measurements` | 按“监测点 + 时刻 + 周期”成组录入多因子浓度、超标校验预览、重复数据覆盖、录入结果回执 |
-| 超标记录标注 | `/exceedances` | 超标自动建单、单条/批量标注(确认 / 忽略 / 重置)、等级人工修正、标注留痕与统计 |
+| 监测数据录入 | `/measurements` | 按“监测点 + 时刻 + 周期”成组录入多因子浓度、超标校验预览、重复数据覆盖、驳回原因回显 |
+| 数据审核 | `/reviews` | 待审核队列、单条/批量通过与驳回、驳回原因必填、审核记录留痕、超时未处理提醒 |
+| 超标记录标注 | `/exceedances` | 审核通过后超标自动建单、单条/批量标注(确认 / 忽略 / 重置)、等级人工修正、标注留痕与统计 |
 | 数据查询 | `/query` | 多条件组合检索、聚合统计(按因子/站点/区域/日/月等)、分页浏览、CSV 导出 |
 
 设计要点:
 
-- **超标自动判定**: 数据写入时即按“因子 + 数据周期”取用限值, 计算超标倍数并分级, 同步生成待标注超标记录; 修正数据后超标记录自动更新或撤销。
+- **审核工作流**: 数据提交后先进入`待审核`状态; **审核通过才纳入统计与超标判定口径**(预判超标的数据在通过时生成待标注超标记录); 驳回必须填写原因, 数据退回录入人修改, 重新提交后再次进入待审核; 超过 `REVIEW_TIMEOUT_HOURS`(默认 24h)未审核会在页面上触发超时提醒。
+- **超标自动判定**: 数据写入时即按“因子 + 数据周期”取用限值, 计算超标倍数并分级作为预判; 审核通过后同步生成待标注超标记录; 修正数据后原超标记录退出口径, 待重新审核。
 - **业务规则集中在后端**: 限值与分级规则位于 `backend/app/domain/`, 前端仅做展示与前置校验, 避免规则分叉。
 - **模块化组织**: 后端按 `api / services / models / domain / utils` 分层; 前端每个业务模块独占目录, 公共能力沉淀在 `components/`、`hooks/`、`api/`。
 
@@ -28,7 +30,7 @@
 | 数据库 | SQLite(默认, 零依赖) / PostgreSQL 16(可选, compose 覆盖文件) |
 | 前端 | React 18 · React Router 6 · Vite 7 · Axios · 原生 CSS(设计令牌 + 组件类) |
 | 部署 | Docker 多阶段构建 · Nginx 静态托管与 `/api` 反向代理 · docker compose |
-| 测试 | Pytest(43 个后端用例: 接口 + 领域规则) |
+| 测试 | Pytest(55 个后端用例: 接口 + 领域规则 + 审核工作流) |
 
 ## 目录结构
 
@@ -43,9 +45,9 @@
 │   │   ├── commands.py          # flask init-db / seed / reset-db / stats
 │   │   ├── seed.py              # 演示数据生成与启动引导
 │   │   ├── domain/              # 业务规则: 因子限值、枚举、超标分级
-│   │   ├── models/              # Station / Measurement / Exceedance
-│   │   ├── services/            # 台账、录入、标注、查询统计业务逻辑
-│   │   ├── api/                 # 蓝图: meta / stations / measurements / exceedances / query
+│   │   ├── models/              # Station / Measurement / Exceedance / ReviewRecord
+│   │   ├── services/            # 台账、录入、审核、标注、查询统计业务逻辑
+│   │   ├── api/                 # 蓝图: meta / stations / measurements / reviews / exceedances / query
 │   │   └── utils/               # 校验器、分页、CSV 导出
 │   ├── tests/                   # Pytest 用例
 │   ├── Dockerfile · docker-entrypoint.sh · requirements*.txt
@@ -56,7 +58,7 @@
 │   │   ├── components/          # layout(侧边栏/顶栏) 与 common(表格/分页/弹窗/表单等)
 │   │   ├── constants/           # 路由、标签与色板映射
 │   │   ├── hooks/               # useListQuery / useAsyncData / useOptions
-│   │   ├── pages/               # overview / stations / measurements / exceedances / query
+│   │   ├── pages/               # overview / stations / measurements / reviews / exceedances / query
 │   │   ├── styles/global.css    # 设计令牌与公共样式
 │   │   └── utils/               # 时间/数值格式化、下载
 │   ├── Dockerfile · nginx.conf · vite.config.js
@@ -80,7 +82,7 @@ docker compose up -d --build
 | 前端 | http://localhost:8080 | Nginx 托管, `/api` 反向代理到后端 |
 | 后端 | http://localhost:5000/api/meta/health | 健康检查 |
 
-首次启动会自动建表并写入演示数据(8 个监测点 / 1200 条监测数据 / 52 条超标记录), 可通过环境变量 `SEED_DEMO=false` 关闭。
+首次启动会自动建表并写入演示数据(8 个监测点 / 1200 条监测数据, 其中约九成已审核通过并产生超标记录, 其余留作待审核与超时演示), 可通过环境变量 `SEED_DEMO=false` 关闭。
 
 ```bash
 docker compose ps          # 查看容器与健康状态
@@ -139,6 +141,7 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --buil
 - **判定**: `监测值 > 限值` 即判为超标, 记录限值快照与原值, 避免限值调整后历史数据失真。
 - **分级**: 超标倍数 = 监测值 / 限值; `1.0 ~ 1.5 倍` 为轻度超标, `1.5 ~ 2.0 倍` 为中度超标, `≥ 2.0 倍` 为重度超标。
 - **无 1 小时限值的因子**(PM2.5、PM10 小时值)仅记录数值, 不参与超标判定, 避免误报。
+- **审核口径**: 录入数据先标记`待审核(pending)`, 审核通过`(approved)`后才进入统计与超标判定口径并生成超标记录; 驳回`(rejected)`必须填写原因, 数据退回录入人修改后重新提交再次待审。
 - **标注状态**: `待标注(pending)` 由系统自动创建, 人工标注为 `已确认(confirmed)` 或 `已忽略(ignored)`; 确认与忽略都必须填写标注说明, 用于后续追溯。
 
 ## API 概览
@@ -160,6 +163,11 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --buil
 | POST | `/api/measurements/preview` | 超标校验预览(不写库) |
 | DELETE | `/api/measurements/{id}` | 删除监测数据 |
 | GET | `/api/measurements/export` | 按条件导出 CSV |
+| GET | `/api/reviews/pending` | 待审核队列(含等待时长与超时标记) |
+| GET | `/api/reviews/summary` | 待审核数量 / 超时未处理 / 今日已审统计 |
+| GET | `/api/reviews/records` | 审核记录(提交/重报/通过/驳回审计轨迹) |
+| POST | `/api/reviews/{id}` | 单条审核(`action=approve/reject`, 驳回必填原因) |
+| POST | `/api/reviews/batch` | 批量审核 |
 | GET | `/api/exceedances` | 超标记录查询(含筛选统计) |
 | GET | `/api/exceedances/{id}` | 超标记录详情(含关联监测数据) |
 | PATCH | `/api/exceedances/{id}` | 单条标注 |
@@ -188,14 +196,15 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --buil
 }
 ```
 
-响应会返回本次新增/更新条数、超标记录、重复项与逐因子判定结果:
+响应会返回本次新增/更新条数、预判超标清单、重复项、逐因子判定结果与审核状态(提交后进入待审核):
 
 ```json
 {
   "created": [ "..." ],
   "updated": [],
-  "exceedances": [ { "pollutant": "SO2", "level": "moderate", "exceed_ratio": 1.28 } ],
+  "exceedance_previews": [ { "pollutant": "SO2", "level": "moderate", "exceed_ratio": 1.28 } ],
   "duplicates": [],
+  "review": { "status": "pending", "status_label": "待审核", "count": 3 },
   "summary": { "created_count": 3, "updated_count": 0, "exceeded_count": 1, "duplicate_count": 0 }
 }
 ```
@@ -205,10 +214,11 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --buil
 | 表 | 关键字段 | 说明 |
 | --- | --- | --- |
 | `stations` | `code`(唯一) `name` `area` `station_type` `status` `longitude/latitude` `installed_at` | 监测点台账 |
-| `measurements` | `station_id` `pollutant` `period` `value` `limit_value` `exceed_ratio` `is_exceeded` `measured_at` `data_source` `recorder` | 监测数据; `(station_id, pollutant, period, measured_at)` 唯一 |
-| `exceedances` | `measurement_id`(唯一) `status` `level` `note` `annotator` `annotated_at` | 超标记录与人工标注 |
+| `measurements` | `station_id` `pollutant` `period` `value` `limit_value` `exceed_ratio` `is_exceeded` `measured_at` `data_source` `recorder` `review_status` `reviewer` `reviewed_at` `review_reason` | 监测数据; `(station_id, pollutant, period, measured_at)` 唯一 |
+| `exceedances` | `measurement_id`(唯一) `status` `level` `note` `annotator` `annotated_at` | 超标记录与人工标注(审核通过后生成) |
+| `review_records` | `measurement_id` `action` `from_status` `to_status` `reviewer` `reason` `created_at` | 审核审计轨迹(提交/重报/通过/驳回) |
 
-删除监测点会级联清理其监测数据与超标记录; 删除监测数据会同时删除对应超标记录。
+删除监测点会级联清理其监测数据、超标记录与审核记录; 删除监测数据会同时删除对应超标记录与审核记录。
 
 ## 配置项
 
@@ -219,6 +229,7 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --buil
 | `CORS_ORIGINS` | `*` | 允许的前端来源, 逗号分隔 |
 | `TIMEZONE` | `Asia/Shanghai` | 展示时区 |
 | `AUTO_INIT_DB` / `AUTO_SEED` | `true`(开发) | 启动时自动建表 / 写入演示数据 |
+| `REVIEW_TIMEOUT_HOURS` | `24` | 待审核超过该时长视为超时, 触发页面提醒 |
 | `SEED_DEMO` | `true` | Docker 容器启动时是否写入演示数据 |
 | `GUNICORN_WORKERS` | `2` | 生产容器 worker 数量 |
 | `VITE_API_BASE` | `/api` | 前端接口前缀 |
@@ -228,7 +239,7 @@ docker compose -f docker-compose.yml -f docker-compose.postgres.yml up -d --buil
 
 ```bash
 cd backend
-python -m pytest -q          # 43 个用例: 台账 CRUD/级联、录入与超标判定、标注规则、查询统计与导出、元数据接口
+python -m pytest -q          # 55 个用例: 台账 CRUD/级联、录入与超标判定、审核工作流、标注规则、查询统计与导出、元数据接口
 
 cd frontend
 npm run build                # 生产构建校验

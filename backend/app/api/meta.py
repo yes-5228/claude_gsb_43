@@ -8,13 +8,14 @@ from ..domain.constants import (
     EXCEEDANCE_LEVEL_LABELS,
     EXCEEDANCE_STATUS_LABELS,
     PERIOD_LABELS,
+    REVIEW_STATUS_LABELS,
     STATION_STATUS_LABELS,
     STATION_TYPE_LABELS,
     options_payload,
 )
 from ..domain.standards import POLLUTANTS
 from ..extensions import db
-from ..services import exceedance_service, query_service, station_service
+from ..services import exceedance_service, query_service, review_service, station_service
 
 bp = Blueprint("meta", __name__)
 
@@ -70,11 +71,16 @@ def overview():
         .limit(5)
         .all()
     )
+    pending_review = (
+        review_service.pending_query({}).limit(5).all()
+    )
     return {
         "stations": station_service.metadata_summary(),
         "measurements": query_service.summary(filters),
         "exceedances": exceedance_service.summary({}),
         "pending_exceedances": [record.to_dict() for record in pending_records],
+        "review": review_service.pending_summary(),
+        "pending_reviews": [review_service.pending_item(record) for record in pending_review],
         "trend": trend,
         "labels": {
             "station_status": STATION_STATUS_LABELS,
@@ -82,6 +88,7 @@ def overview():
             "exceedance_status": EXCEEDANCE_STATUS_LABELS,
             "exceedance_level": EXCEEDANCE_LEVEL_LABELS,
             "data_source": DATA_SOURCE_LABELS,
+            "review_status": REVIEW_STATUS_LABELS,
         },
         "generated_at": datetime.now().isoformat(timespec="seconds"),
     }

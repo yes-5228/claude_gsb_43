@@ -1,16 +1,17 @@
 """监测数据录入接口测试."""
-from app.models import Exceedance, Measurement
+from app.models import Exceedance, Measurement, ReviewRecord
 
 
-def test_batch_entry_creates_records_and_flags_exceedance(client, station, entry_payload):
+def test_batch_entry_creates_pending_records_with_exceedance_preview(
+    client, station, entry_payload
+):
     response = client.post("/api/measurements/entries", json=entry_payload(station.id))
     assert response.status_code == 201
     body = response.get_json()
     assert body["summary"]["created_count"] == 3
     assert body["summary"]["exceeded_count"] == 1
-    assert len(body["exceedances"]) == 1
-    assert body["exceedances"][0]["pollutant"] == "SO2"
-    assert body["exceedances"][0]["status"] == "pending"
+    assert body["review"] == {"status": "pending", "status_label": "待审核", "count": 3}
+    assert body["exceedance_previews"][0]["pollutant"] == "SO2"
     assert body["station"]["code"] == "TEST-001"
 
     stored = Measurement.query.filter_by(pollutant="SO2").one()
@@ -19,6 +20,10 @@ def test_batch_entry_creates_records_and_flags_exceedance(client, station, entry
     assert stored.exceed_ratio == 1.8
     assert stored.unit == "μg/m³"
     assert stored.recorder == "测试员"
+    # 提交后先进入待审核状态, 不生成超标记录
+    assert stored.review_status == "pending"
+    assert Exceedance.query.count() == 0
+    assert ReviewRecord.query.filter_by(action="submit").count() == 3
 
 
 def test_duplicate_entry_is_reported_as_conflict(client, station, entry_payload):
@@ -30,8 +35,11 @@ def test_duplicate_entry_is_reported_as_conflict(client, station, entry_payload)
     assert Measurement.query.count() == 3
 
 
-def test_overwrite_updates_record_and_clears_exceedance(client, station, entry_payload):
+def test_overwrite_returns_record_to_pending_and_drops_exceedance(
+    client, station, entry_payload, approve_all
+):
     client.post("/api/measurements/entries", json=entry_payload(station.id))
+    approve_all()
     assert Exceedance.query.count() == 1
 
     response = client.post(
@@ -47,8 +55,16 @@ def test_overwrite_updates_record_and_clears_exceedance(client, station, entry_p
     assert body["summary"]["created_count"] == 0
     assert body["summary"]["updated_count"] == 1
     assert body["summary"]["exceeded_count"] == 0
-    assert Measurement.query.filter_by(pollutant="SO2").one().is_exceeded is False
+
+    record = Measurement.query.filter_by(pollutant="SO2").one()
+    assert record.is_exceeded is False
+    # 修改后重新进入待审核, 原超标记录退出判定口径
+    assert record.review_status == "pending"
+    assert record.reviewed_at is None
     assert Exceedance.query.count() == 0
+    resubmit = ReviewRecord.query.filter_by(action="resubmit").one()
+    assert resubmit.from_status == "approved"
+    assert resubmit.to_status == "pending"
 
 
 def test_preview_validates_without_writing(client, station, entry_payload):
@@ -101,25 +117,38 @@ def test_hourly_particulate_is_stored_without_limit(client, station, entry_paylo
     assert Exceedance.query.count() == 0
 
 
-def test_list_measurements_with_filters(client, station, entry_payload):
+def test_list_measurements_with_filters(client, station, entry_payload, approve_all):
     client.post("/api/measurements/entries", json=entry_payload(station.id))
+    approve_all()
     body = client.get("/api/measurements?station_id=%d&pollutant=SO2" % station.id).get_json()
     assert body["total"] == 1
     assert body["items"][0]["pollutant_label"] == "SO₂"
     assert body["items"][0]["station"]["code"] == "TEST-001"
+    assert body["items"][0]["review_status_label"] == "审核通过"
     assert body["summary"]["exceeded_count"] == 1
 
     exceeded = client.get("/api/measurements?is_exceeded=true").get_json()
     assert exceeded["total"] == 1
 
+    by_status = client.get("/api/measurements?review_status=approved").get_json()
+    assert by_status["total"] == 3
+    none_pending = client.get("/api/measurements?review_status=pending").get_json()
+    assert none_pending["total"] == 0
 
-def test_delete_measurement_removes_exceedance(client, station, entry_payload):
-    created = client.post("/api/measurements/entries", json=entry_payload(station.id)).get_json()
-    exceeded_id = created["exceedances"][0]["measurement_id"]
-    response = client.delete("/api/measurements/%d" % exceeded_id)
+
+def test_delete_measurement_removes_exceedance_and_review_records(
+    client, station, entry_payload, approve_all
+):
+    client.post("/api/measurements/entries", json=entry_payload(station.id))
+    approve_all()
+    exceeded = Exceedance.query.one()
+    assert ReviewRecord.query.count() == 6  # 3 条提交 + 3 条审核通过
+
+    response = client.delete("/api/measurements/%d" % exceeded.measurement_id)
     assert response.status_code == 200
     assert Exceedance.query.count() == 0
     assert Measurement.query.count() == 2
+    assert ReviewRecord.query.count() == 4  # 被删记录的 submit + approve 一并移除
 
 
 def test_entry_context_exposes_form_options(client, station):
@@ -136,5 +165,7 @@ def test_export_measurements_csv(client, station, entry_payload):
     assert "text/csv" in response.headers["Content-Type"]
     text = response.get_data(as_text=True)
     assert text.startswith("\ufeff站点编码")
+    assert "审核状态" in text.splitlines()[0]
+    assert "待审核" in text
     assert "测试监测点" in text
     assert len([line for line in text.strip().splitlines()]) == 4

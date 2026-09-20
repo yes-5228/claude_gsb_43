@@ -19,7 +19,7 @@ export default function OverviewPage() {
   if (error && !data) return <ErrorState error={error} onRetry={reload} />
   if (!data) return null
 
-  const { stations, measurements, exceedances, trend, pending_exceedances: pending } = data
+  const { stations, measurements, exceedances, trend, review, pending_reviews: pendingReviews, pending_exceedances: pending } = data
 
   const pendingColumns = [
     { key: 'measured_at', title: '监测时间', className: 'cell-nowrap', render: (row) => formatDateTime(row.measured_at) },
@@ -38,6 +38,37 @@ export default function OverviewPage() {
     }
   ]
 
+  const reviewColumns = [
+    { key: 'created_at', title: '提交时间', className: 'cell-nowrap', render: (row) => formatDateTime(row.created_at) },
+    { key: 'station', title: '监测点', render: (row) => row.station?.name || '-' },
+    { key: 'pollutant_label', title: '因子' },
+    { key: 'period_label', title: '周期' },
+    {
+      key: 'value',
+      title: '监测值',
+      render: (row) => (
+        <span className={row.is_exceeded ? 'danger-text strong' : ''}>{formatNumber(row.value)}</span>
+      )
+    },
+    {
+      key: 'is_exceeded',
+      title: '超标预判',
+      render: (row) =>
+        row.is_exceeded ? <Tag tone="danger">{formatRatio(row.exceed_ratio)}</Tag> : <Tag tone="success">达标</Tag>
+    },
+    { key: 'recorder', title: '录入人', render: (row) => row.recorder || '-' },
+    {
+      key: 'waiting',
+      title: '等待时长',
+      render: (row) =>
+        row.is_overdue ? (
+          <Tag tone="danger">超时未处理</Tag>
+        ) : (
+          <span className="muted small">未超时</span>
+        )
+    }
+  ]
+
   const typeRows = (stations.by_type || []).map((item) => ({
     id: item.key,
     label: item.label,
@@ -47,6 +78,14 @@ export default function OverviewPage() {
 
   return (
     <>
+      {review?.overdue > 0 ? (
+        <Alert tone="warning">
+          有 {review.overdue} 条监测数据超过 {review.threshold_hours} 小时未审核, 请前往
+          <Link to="/reviews"> 数据审核 </Link>
+          及时处理, 超时数据不会纳入统计与超标判定口径。
+        </Alert>
+      ) : null}
+
       <div className="stat-grid">
         <StatCard
           label="监测点总数"
@@ -58,7 +97,17 @@ export default function OverviewPage() {
         <StatCard
           label="监测数据总量"
           value={measurements.total}
-          foot={`覆盖 ${measurements.station_count} 个监测点 · 均值 ${formatNumber(measurements.avg_value)}`}
+          foot={`已审核口径 · 覆盖 ${measurements.station_count} 个监测点 · 均值 ${formatNumber(measurements.avg_value)}`}
+        />
+        <StatCard
+          label="待审核数据"
+          value={review?.pending ?? 0}
+          tone={review?.pending ? 'warning' : undefined}
+          foot={
+            <Link to="/reviews">
+              {review?.overdue ? `超时 ${review.overdue} 条 · ` : ''}前往数据审核 →
+            </Link>
+          }
         />
         <StatCard
           label="超标记录"
@@ -107,6 +156,28 @@ export default function OverviewPage() {
           </div>
         </SectionCard>
       </div>
+
+      <SectionCard
+        title="待审核数据 (最早提交 5 条)"
+        hint="审核通过后数据才纳入统计与超标判定口径, 超时未处理以红色标记"
+        actions={
+          <Link className="btn btn-sm btn-primary" to="/reviews">
+            前往数据审核
+          </Link>
+        }
+      >
+        {review?.pending === 0 ? (
+          <Alert tone="success">当前没有待审核的数据, 审核队列已清空 ✅</Alert>
+        ) : (
+          <DataTable
+            columns={reviewColumns}
+            rows={pendingReviews || []}
+            loading={loading}
+            emptyText="暂无待审核数据"
+            emptyIcon="✅"
+          />
+        )}
+      </SectionCard>
 
       <SectionCard
         title="待标注超标记录 (最近 5 条)"

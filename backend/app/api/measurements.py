@@ -1,7 +1,7 @@
 """监测数据录入 API."""
 from flask import Blueprint, current_app, request
 
-from ..domain.constants import DATA_SOURCE_LABELS, PERIOD_LABELS
+from ..domain.constants import DATA_SOURCE_LABELS, PERIOD_LABELS, REVIEW_STATUS_LABELS
 from ..services import measurement_service, query_service, station_service
 from ..utils.pagination import paginate_query
 from ..utils.validation import Validator
@@ -82,6 +82,7 @@ def export_measurements():
         ("限值", "limit_value"),
         ("是否超标", lambda row: "是" if row.is_exceeded else "否"),
         ("超标倍数", "exceed_ratio"),
+        ("审核状态", lambda row: REVIEW_STATUS_LABELS.get(row.review_status, row.review_status)),
         ("监测时间", lambda row: row.measured_at.strftime("%Y-%m-%d %H:%M")),
         ("数据来源", lambda row: DATA_SOURCE_LABELS.get(row.data_source, row.data_source)),
         ("录入人", "recorder"),

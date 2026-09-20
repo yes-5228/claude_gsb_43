@@ -62,8 +62,9 @@ def test_invalid_choice_is_rejected(client, station):
     assert "status" in response.get_json()["error"]["fields"]
 
 
-def test_station_detail_returns_pollutant_stats(client, station, entry_payload):
+def test_station_detail_returns_pollutant_stats(client, station, entry_payload, approve_all):
     client.post("/api/measurements/entries", json=entry_payload(station.id))
+    approve_all()
     body = client.get("/api/stations/%d" % station.id).get_json()
     assert body["stats"]["measurement_count"] == 3
     assert body["stats"]["exceeded_count"] == 1
@@ -72,8 +73,11 @@ def test_station_detail_returns_pollutant_stats(client, station, entry_payload):
     assert pollutants == {"PM25", "SO2", "CO"}
 
 
-def test_delete_station_removes_measurements_and_exceedances(client, app, station, entry_payload):
+def test_delete_station_removes_measurements_and_exceedances(
+    client, app, station, entry_payload, approve_all
+):
     client.post("/api/measurements/entries", json=entry_payload(station.id))
+    approve_all()
     assert Measurement.query.count() == 3
 
     response = client.delete("/api/stations/%d" % station.id)

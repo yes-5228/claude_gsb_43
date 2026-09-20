@@ -3,7 +3,8 @@ from app.models import Exceedance
 
 
 def _make_exceedances(client, station, entry_payload, measured_at="2026-09-01 10:00"):
-    return client.post(
+    """录入并审核通过, 使超标数据进入判定口径生成超标记录."""
+    body = client.post(
         "/api/measurements/entries",
         json=entry_payload(
             station.id,
@@ -15,9 +16,15 @@ def _make_exceedances(client, station, entry_payload, measured_at="2026-09-01 10
             ],
         ),
     ).get_json()
+    ids = [item["id"] for item in body["created"]]
+    client.post(
+        "/api/reviews/batch",
+        json={"ids": ids, "action": "approve", "reviewer": "审核员"},
+    )
+    return body
 
 
-def test_exceedance_records_are_created_automatically(client, station, entry_payload):
+def test_exceedance_records_are_created_after_approval(client, station, entry_payload):
     body = _make_exceedances(client, station, entry_payload)
     assert body["summary"]["exceeded_count"] == 2
 
@@ -27,6 +34,17 @@ def test_exceedance_records_are_created_automatically(client, station, entry_pay
     assert levels == {"SO2": "light", "NO2": "moderate"}
     assert listed["summary"]["pending"] == 2
     assert listed["summary"]["by_status"][0]["key"] == "pending"
+
+
+def test_pending_review_data_stays_out_of_exceedance_scope(client, station, entry_payload):
+    """未审核的数据即使预判超标, 也不生成超标记录."""
+    client.post(
+        "/api/measurements/entries",
+        json=entry_payload(station.id, entries=[{"pollutant": "SO2", "value": 600.0}]),
+    )
+    assert Exceedance.query.count() == 0
+    listed = client.get("/api/exceedances").get_json()
+    assert listed["total"] == 0
 
 
 def test_annotation_requires_note_when_not_pending(client, station, entry_payload):

@@ -41,6 +41,9 @@ class BaseConfig:
     AUTO_INIT_DB = _as_bool(os.getenv("AUTO_INIT_DB"), True)
     AUTO_SEED = _as_bool(os.getenv("AUTO_SEED"), True)
 
+    # 监测数据审核: 超过该时长仍未审核视为超时, 触发页面提醒
+    REVIEW_TIMEOUT_HOURS = int(os.getenv("REVIEW_TIMEOUT_HOURS", "24"))
+
 
 class DevelopmentConfig(BaseConfig):
     DEBUG = True

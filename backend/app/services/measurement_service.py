@@ -1,9 +1,10 @@
-"""监测数据录入业务逻辑 (含超标自动判定)."""
+"""监测数据录入业务逻辑 (含超标预判与审核工作流)."""
 from ..domain import exceedance_rules
 from ..domain.standards import get_pollutant
 from ..errors import ConflictError, NotFoundError, ValidationError
 from ..extensions import db
-from ..models import Exceedance, Measurement, Station
+from ..models import Measurement, Station
+from . import review_service
 
 
 def get_measurement(measurement_id):
@@ -117,6 +118,7 @@ def record_entries(station_id, measured_at, period, entries, data_source="manual
                                  measured_at=measured_at)
             db.session.add(record)
 
+        previous_status = record.review_status or "pending"
         record.value = value
         record.unit = meta["unit"]
         record.limit_value = evaluation["limit"]
@@ -125,12 +127,33 @@ def record_entries(station_id, measured_at, period, entries, data_source="manual
         record.data_source = data_source
         record.recorder = entry.get("recorder") or recorder
         record.remark = entry.get("remark") or remark
+        # 任何写入都回到待审核状态, 审核通过后才纳入统计与超标判定口径
+        record.review_status = "pending"
+        record.reviewed_at = None
+        record.reviewer = None
+        record.review_reason = None
 
-        _sync_exceedance(record, meta, evaluation)
+        _drop_exceedance(record)
         db.session.flush()
+        review_service.log_action(
+            record,
+            "submit" if is_new else "resubmit",
+            reviewer=record.recorder,
+            from_status=None if is_new else previous_status,
+        )
         (created if is_new else updated).append(record.to_dict(include_station=True))
         if evaluation["exceeded"]:
-            exceeded.append(record.exceedance.to_dict() if record.exceedance else None)
+            exceeded.append(
+                {
+                    "pollutant": pollutant,
+                    "pollutant_label": meta["label"],
+                    "value": value,
+                    "limit_value": evaluation["limit"],
+                    "exceed_ratio": evaluation["ratio"],
+                    "level": evaluation["level"],
+                    "message": "预判超标, 审核通过后将生成超标记录",
+                }
+            )
 
     if not created and not updated and duplicates:
         raise ConflictError(
@@ -145,9 +168,14 @@ def record_entries(station_id, measured_at, period, entries, data_source="manual
         "period": period,
         "created": created,
         "updated": updated,
-        "exceedances": [item for item in exceeded if item],
+        "exceedance_previews": [item for item in exceeded if item],
         "duplicates": duplicates,
         "evaluations": evaluated,
+        "review": {
+            "status": "pending",
+            "status_label": "待审核",
+            "count": len(created) + len(updated),
+        },
         "summary": {
             "created_count": len(created),
             "updated_count": len(updated),
@@ -157,28 +185,9 @@ def record_entries(station_id, measured_at, period, entries, data_source="manual
     }
 
 
-def _sync_exceedance(record, meta, evaluation):
-    """Create / refresh / drop the exceedance row attached to a measurement."""
-    if evaluation["exceeded"]:
-        if record.exceedance is None:
-            record.exceedance = Exceedance(
-                station_id=record.station_id,
-                pollutant=record.pollutant,
-                period=record.period,
-                measured_at=record.measured_at,
-                value=record.value,
-                limit_value=evaluation["limit"],
-                exceed_ratio=evaluation["ratio"],
-                level=evaluation["level"],
-                status="pending",
-            )
-        else:
-            record.exceedance.value = record.value
-            record.exceedance.limit_value = evaluation["limit"]
-            record.exceedance.exceed_ratio = evaluation["ratio"]
-            record.exceedance.level = evaluation["level"]
-            record.exceedance.measured_at = record.measured_at
-    elif record.exceedance is not None:
+def _drop_exceedance(record):
+    """数据被修改后, 原超标记录退出判定口径, 待重新审核通过后再生成."""
+    if record.exceedance is not None:
         db.session.delete(record.exceedance)
 
 

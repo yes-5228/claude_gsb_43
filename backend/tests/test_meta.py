@@ -23,12 +23,22 @@ def test_options_endpoint_lists_enumerations(client, station):
     assert body["areas"] == ["测试区"]
 
 
-def test_overview_endpoint_aggregates_everything(client, station, entry_payload):
+def test_overview_endpoint_aggregates_everything(client, station, entry_payload, approve_all):
     client.post("/api/measurements/entries", json=entry_payload(station.id))
+
+    pending = client.get("/api/meta/overview").get_json()
+    assert pending["review"]["pending"] == 3  # 待审核数量提醒
+    assert pending["measurements"]["total"] == 0  # 统计口径不含待审核
+    assert len(pending["pending_reviews"]) == 3
+
+    approve_all()
     body = client.get("/api/meta/overview").get_json()
     assert body["stations"]["total"] == 1
     assert body["measurements"]["total"] == 3
     assert body["measurements"]["exceeded_count"] == 1
     assert body["exceedances"]["pending"] == 1
     assert body["pending_exceedances"][0]["pollutant"] == "SO2"
+    assert body["review"]["pending"] == 0
+    assert body["review"]["approved"] == 3
+    assert body["labels"]["review_status"]["pending"] == "待审核"
     assert body["trend"]["group_by"] == "day"
